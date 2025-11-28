@@ -15,14 +15,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.*
+import kotlin.math.pow
 
 // Dark theme colors matching globals.css
 private val DarkBackground = Color(0xFF212121)
 private val LightForeground = Color(0xFFFFFFFF)
 private val PrimaryColor = Color(0xFF90CAF9)
 private val SecondaryColor = Color(0xFFCE93D8)
-private val ErrorColor = Color(0xFFEF5350)
 private val BorderColor = Color(0xFFFFFFFF)
 
 private val AppColorScheme = darkColorScheme(
@@ -34,13 +33,6 @@ private val AppColorScheme = darkColorScheme(
     onSecondary = Color.Black,
     secondaryContainer = SecondaryColor.copy(alpha = 0.3f),
     onSecondaryContainer = LightForeground,
-    tertiary = Color(0xFF80CBC4),
-    onTertiary = Color.Black,
-    tertiaryContainer = Color(0xFF80CBC4).copy(alpha = 0.3f),
-    onTertiaryContainer = LightForeground,
-    error = ErrorColor,
-    errorContainer = ErrorColor.copy(alpha = 0.3f),
-    onErrorContainer = LightForeground,
     background = DarkBackground,
     onBackground = LightForeground,
     surface = DarkBackground,
@@ -59,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SolarProfitCalculatorScreen()
+                    EmissionCalculatorScreen()
                 }
             }
         }
@@ -67,25 +59,35 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SolarProfitCalculatorScreen() {
-    var averagePowerVal by remember { mutableStateOf("5.0") }
-    var sigma1Val by remember { mutableStateOf("1.0") }
-    var sigma2Val by remember { mutableStateOf("0.25") }
-    var costVal by remember { mutableStateOf("7.0") }
+fun EmissionCalculatorScreen() {
+    var coalAmountVal by remember { mutableStateOf("") }
+    var oilAmountVal by remember { mutableStateOf("") }
+    var gasAmountVal by remember { mutableStateOf("") }
 
-    val averagePower = averagePowerVal.toDoubleOrNull() ?: 5.0
-    val sigma1 = sigma1Val.toDoubleOrNull() ?: 1.0
-    val sigma2 = sigma2Val.toDoubleOrNull() ?: 0.25
-    val cost = costVal.toDoubleOrNull() ?: 7.0
+    val coalAmount = coalAmountVal.toDoubleOrNull() ?: 0.0
+    val oilAmount = oilAmountVal.toDoubleOrNull() ?: 0.0
+    val gasAmount = gasAmountVal.toDoubleOrNull() ?: 0.0
 
-    // Power range for integration
-    val powerRangeBot = 4.75
-    val powerRangeTop = 5.25
+    // Constants
+    val filterEfficiency = 0.985
 
-    // Calculate results
-    val results = remember(averagePower, sigma1, sigma2, cost) {
-        calculateProfits(averagePower, sigma1, sigma2, cost, powerRangeBot, powerRangeTop)
-    }
+    // Coal constants
+    val coalHoC = 20.47  // Heat of combustion
+    val coalFlyAsh = 0.8
+    val coalAshAmount = 25.20
+    val coalAshCombustibles = 1.5
+
+    // Oil constants
+    val oilHoC = 40.40
+    val oilFlyAsh = 1.0
+    val oilAshAmount = 0.15
+    val oilAshCombustibles = 0.0
+
+    // Natural gas constants
+    val gasHoC = 33.08
+    val gasFlyAsh = 0.0
+    val gasAshAmount = 0.0
+    val gasAshCombustibles = 0.0
 
     Column(
         modifier = Modifier
@@ -95,7 +97,7 @@ fun SolarProfitCalculatorScreen() {
     ) {
         // Header
         Text(
-            text = "Веб калькулятор розрахунку прибутку від сонячних електростанцій з встановленою системою прогнозування сонячної потужності",
+            text = "Веб калькулятор для розрахунку валових викидів шкідливих речовин у вигляді суспендованих твердих частинок при спалювання вугілля, мазуту та природного газу",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -115,42 +117,32 @@ fun SolarProfitCalculatorScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Умова:",
+                    text = "Вхідні дані:",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
 
-                InputFieldWithUnit(
-                    label = "Pс (Середня потужність СЕС)",
-                    value = averagePowerVal,
-                    onValueChange = { averagePowerVal = it },
-                    unit = "МВт"
+                InputField(
+                    label = "Донецьке газове вугілля марки ГР (т):",
+                    value = coalAmountVal,
+                    onValueChange = { coalAmountVal = it }
                 )
 
-                InputFieldWithUnit(
-                    label = "σ₁ (СКВ до вдосконалення)",
-                    value = sigma1Val,
-                    onValueChange = { sigma1Val = it },
-                    unit = "МВт"
+                InputField(
+                    label = "Високосірчистий мазут марки 40 (т):",
+                    value = oilAmountVal,
+                    onValueChange = { oilAmountVal = it }
                 )
 
-                InputFieldWithUnit(
-                    label = "σ₂ (СКВ після вдосконалення)",
-                    value = sigma2Val,
-                    onValueChange = { sigma2Val = it },
-                    unit = "МВт"
-                )
-
-                InputFieldWithUnit(
-                    label = "В (Тариф «зеленого» аукціону)",
-                    value = costVal,
-                    onValueChange = { costVal = it },
-                    unit = "грн/кВт·год"
+                InputField(
+                    label = "Природній газ із газопроводу Уренгой-Ужгород (м³):",
+                    value = gasAmountVal,
+                    onValueChange = { gasAmountVal = it }
                 )
             }
         }
 
-        // Description Card
+        // Constants Info
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -163,18 +155,33 @@ fun SolarProfitCalculatorScreen() {
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Пояснення:",
+                    text = "Константи:",
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                Text(
-                    text = "Розрахунок базується на системі \"зеленого\" аукціону, де:",
-                    fontSize = 14.sp
-                )
-                Text("• σ₁ - середньоквадратичне відхилення ДО вдосконалення системи прогнозування", fontSize = 12.sp)
-                Text("• σ₂ - середньоквадратичне відхилення ПІСЛЯ вдосконалення системи прогнозування", fontSize = 12.sp)
-                Text("• Менше σ означає кращий прогноз і менші штрафи", fontSize = 12.sp)
-                Text("• Прибуток = Виручка за продану енергію - Штрафи за неточний прогноз", fontSize = 12.sp)
+                Text("Ступінь очищення золовловлювачем: ${filterEfficiency * 100}%")
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text("Вугілля:", fontWeight = FontWeight.Bold)
+                Text("  • Теплота згоряння: $coalHoC МДж/кг")
+                Text("  • Частка золи винесення: $coalFlyAsh")
+                Text("  • Зольність палива: $coalAshAmount%")
+                Text("  • Вміст горючих у золі: $coalAshCombustibles%")
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text("Мазут:", fontWeight = FontWeight.Bold)
+                Text("  • Теплота згоряння: $oilHoC МДж/кг")
+                Text("  • Частка золи винесення: $oilFlyAsh")
+                Text("  • Зольність палива: $oilAshAmount%")
+                Text("  • Вміст горючих у золі: $oilAshCombustibles%")
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text("Природний газ:", fontWeight = FontWeight.Bold)
+                Text("  • Теплота згоряння: $gasHoC МДж/м³")
+                Text("  • Зольність: $gasAshAmount (відсутня)")
             }
         }
 
@@ -187,34 +194,51 @@ fun SolarProfitCalculatorScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Відповідь:",
+                    text = "Результати розрахунків:",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
 
-                // Result for sigma1
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Прибуток до вдосконалення (σ₁ = $sigma1 МВт):",
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "${String.format("%.2f", results.profit1)} тис. грн",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
+                val coalEmission = calcEmissionRate(
+                    coalHoC, coalFlyAsh, coalAshAmount,
+                    coalAshCombustibles, filterEfficiency, coalAmount
+                )
 
-                // Result for sigma2
+                ResultCard(
+                    title = "Валовий викид при спалюванні вугілля",
+                    value = String.format("%.2f", coalEmission),
+                    unit = "т",
+                    description = "Розраховано на основі характеристик Донецького газового вугілля марки ГР"
+                )
+
+                val oilEmission = calcEmissionRate(
+                    oilHoC, oilFlyAsh, oilAshAmount,
+                    oilAshCombustibles, filterEfficiency, oilAmount
+                )
+
+                ResultCard(
+                    title = "Валовий викид при спалюванні мазуту",
+                    value = String.format("%.2f", oilEmission),
+                    unit = "т",
+                    description = "Розраховано на основі характеристик високосірчистого мазуту марки 40"
+                )
+
+                val gasEmission = calcEmissionRate(
+                    gasHoC, gasFlyAsh, gasAshAmount,
+                    gasAshCombustibles, filterEfficiency, gasAmount
+                )
+
+                ResultCard(
+                    title = "Валовий викид при спалюванні природного газу",
+                    value = String.format("%.2f", gasEmission),
+                    unit = "т",
+                    description = "Розраховано для газу з газопроводу Уренгой-Ужгород"
+                )
+
+                val totalEmission = coalEmission + oilEmission + gasEmission
+
+                Divider()
+
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -224,108 +248,44 @@ fun SolarProfitCalculatorScreen() {
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = "Прибуток після вдосконалення (σ₂ = $sigma2 МВт):",
-                            fontSize = 14.sp
+                            text = "Загальний валовий викид:",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${String.format("%.2f", results.profit2)} тис. грн",
-                            fontSize = 32.sp,
+                            text = "${String.format("%.2f", totalEmission)} т",
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
-
-                Divider()
-
-                // Improvement
-                val improvement = results.profit2 - results.profit1
-                val improvementPercent = if (results.profit1 != 0.0) {
-                    (improvement / abs(results.profit1)) * 100
-                } else 0.0
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Покращення прибутку:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                        Text(
-                            text = "+${String.format("%.2f", improvement)} тис. грн",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = "(${String.format("%.1f", improvementPercent)}% покращення)",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
-                }
-
-                // Detailed breakdown
-                Divider()
-
-                Text(
-                    text = "Детальний розрахунок:",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-
-                DetailedResults(
-                    title = "До вдосконалення (σ₁)",
-                    revenue = results.revenue1,
-                    fine = results.fine1,
-                    profit = results.profit1
-                )
-
-                DetailedResults(
-                    title = "Після вдосконалення (σ₂)",
-                    revenue = results.revenue2,
-                    fine = results.fine2,
-                    profit = results.profit2
-                )
             }
         }
     }
 }
 
 @Composable
-fun InputFieldWithUnit(label: String, value: String, onValueChange: (String) -> Unit, unit: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+fun InputField(label: String, value: String, onValueChange: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Text(
             text = label,
-            modifier = Modifier.weight(2f),
-            fontSize = 14.sp
+            modifier = Modifier.padding(bottom = 4.dp)
         )
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            singleLine = true
-        )
-        Text(
-            text = unit,
-            modifier = Modifier.weight(1f).padding(start = 8.dp),
-            fontSize = 14.sp
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("0") }
         )
     }
 }
 
 @Composable
-fun DetailedResults(title: String, revenue: Double, fine: Double, profit: Double) {
+fun ResultCard(title: String, value: String, unit: String, description: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -333,133 +293,63 @@ fun DetailedResults(title: String, revenue: Double, fine: Double, profit: Double
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
             Text(
                 text = title,
-                fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
-                Text("Виручка:", fontSize = 12.sp)
-                Text("${String.format("%.2f", revenue)} тис. грн", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Штрафи:", fontSize = 12.sp)
-                Text("${String.format("%.2f", fine)} тис. грн", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-            Divider(modifier = Modifier.padding(vertical = 4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Прибуток:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "${String.format("%.2f", profit)} тис. грн",
-                    fontSize = 12.sp,
+                    text = value,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = unit,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
             }
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
-data class ProfitResults(
-    val revenue1: Double,
-    val fine1: Double,
-    val profit1: Double,
-    val revenue2: Double,
-    val fine2: Double,
-    val profit2: Double
-)
-
 // Calculation functions
-fun calculateProfits(
-    averagePower: Double,
-    sigma1: Double,
-    sigma2: Double,
-    cost: Double,
-    powerRangeBot: Double,
-    powerRangeTop: Double
-): ProfitResults {
-    // Calculate for sigma1
-    val deltaW1 = integrate(
-        { p -> calcDeltaW(p, averagePower, sigma1) },
-        powerRangeBot,
-        powerRangeTop,
-        1000
-    )
-    val w1 = calcWPos(averagePower, deltaW1)
-    val p1 = calcP(w1, cost)
-    val w2 = calcWNeg(averagePower, deltaW1)
-    val f1 = calcF(w2, cost)
-    val totalProfit1 = calcTotalProfit(p1, f1)
-
-    // Calculate for sigma2
-    val deltaW2 = integrate(
-        { p -> calcDeltaW(p, averagePower, sigma2) },
-        powerRangeBot,
-        powerRangeTop,
-        1000
-    )
-    val w3 = calcWPos(averagePower, deltaW2)
-    val p2 = calcP(w3, cost)
-    val w4 = calcWNeg(averagePower, deltaW2)
-    val f2 = calcF(w4, cost)
-    val totalProfit2 = calcTotalProfit(p2, f2)
-
-    return ProfitResults(
-        revenue1 = p1,
-        fine1 = f1,
-        profit1 = totalProfit1,
-        revenue2 = p2,
-        fine2 = f2,
-        profit2 = totalProfit2
-    )
+fun calcGrossEmission(
+    itemHoC: Double,
+    itemFlyAsh: Double,
+    itemAshAmount: Double,
+    itemAshCombustibles: Double,
+    itemFilterEfficiency: Double
+): Double {
+    return (10.0.pow(6) / itemHoC) * itemFlyAsh *
+           (itemAshAmount / (100.0 - itemAshCombustibles)) *
+           (1.0 - itemFilterEfficiency)
 }
 
-fun integrate(func: (Double) -> Double, start: Double, end: Double, numPoints: Int): Double {
-    val step = (end - start) / numPoints
-    var sum = 0.5 * (func(start) + func(end))
-
-    var i = start
-    while (i < end) {
-        sum += func(i)
-        i += step
-    }
-
-    return sum * step
-}
-
-fun calcDeltaW(p: Double, averagePower: Double, sigma: Double): Double {
-    return (1.0 / (sigma * sqrt(2.0 * PI))) *
-           exp(-((p - averagePower).pow(2)) / (2.0 * sigma.pow(2)))
-}
-
-fun calcWPos(averagePower: Double, deltaW: Double): Double {
-    return averagePower * 24.0 * deltaW
-}
-
-fun calcP(w: Double, cost: Double): Double {
-    return w * cost
-}
-
-fun calcWNeg(averagePower: Double, deltaW: Double): Double {
-    return averagePower * 24.0 * (1.0 - deltaW)
-}
-
-fun calcF(w: Double, cost: Double): Double {
-    return w * cost
-}
-
-fun calcTotalProfit(profit: Double, fine: Double): Double {
-    return profit - fine
+fun calcEmissionRate(
+    itemHoC: Double,
+    itemFlyAsh: Double,
+    itemAshAmount: Double,
+    itemAshCombustibles: Double,
+    itemFilterEfficiency: Double,
+    itemAmount: Double
+): Double {
+    return 10.0.pow(-6) *
+           calcGrossEmission(itemHoC, itemFlyAsh, itemAshAmount, itemAshCombustibles, itemFilterEfficiency) *
+           itemHoC *
+           itemAmount
 }
